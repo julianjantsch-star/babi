@@ -1,8 +1,8 @@
 import 'server-only';
 import { Resend } from 'resend';
+import { conferirRemetente, REMETENTE_PADRAO } from './remetente';
 
-const remetente = () =>
-  process.env.EMAIL_FROM ?? 'Consultório <onboarding@resend.dev>';
+const remetenteConfigurado = () => process.env.EMAIL_FROM ?? REMETENTE_PADRAO;
 
 function cliente() {
   const key = process.env.RESEND_API_KEY;
@@ -19,6 +19,9 @@ async function enviar(opts: {
   text?: string;
   attachments?: Anexo[];
 }) {
+  const remetente = remetenteConfigurado();
+  conferirRemetente(remetente);
+
   const resend = cliente();
   if (!resend) {
     // Sem chave configurada, o app continua utilizável em desenvolvimento:
@@ -30,7 +33,7 @@ async function enviar(opts: {
   }
 
   const { data, error } = await resend.emails.send({
-    from: remetente(),
+    from: remetente,
     to: Array.isArray(opts.to) ? opts.to : [opts.to],
     subject: opts.subject,
     html: opts.html,
