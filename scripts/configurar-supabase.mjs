@@ -390,7 +390,7 @@ async function criarAdministrador(ref, chaveService) {
     body: JSON.stringify({
       type: 'recovery',
       email: cfg.adminEmail,
-      options: { redirect_to: `${cfg.siteUrl}/definir-senha` },
+      redirect_to: `${cfg.siteUrl}/definir-senha`,
     }),
   });
 

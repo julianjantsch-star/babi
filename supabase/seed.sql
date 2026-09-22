@@ -25,7 +25,7 @@ insert into public.clientes (
   ('Convênio Saúde Total LTDA', 'PJ', '11444777000161', 'faturamento@saudetotal.com',
    '(11) 3333-4444', '01452000', 'Avenida Brigadeiro Faria Lima', '201',
    'Pinheiros', 'São Paulo', '3550308', 'SP')
-on conflict (documento) do nothing;
+on conflict (documento) where documento is not null do nothing;
 
 -- Três contas a receber, uma por origem, para exercitar o toggle e os filtros.
 do $$
@@ -36,6 +36,12 @@ declare
   v_id    uuid;
   v_base  date := date_trunc('month', current_date)::date;
 begin
+  -- Seed é só para desenvolvimento: se já há lançamentos, não faz nada.
+  if exists (select 1 from public.recebiveis) then
+    raise notice 'Recebíveis já existem — seed ignorado.';
+    return;
+  end if;
+
   select id into v_maria from public.clientes where documento = '52998224725';
   select id into v_joao  from public.clientes where documento = '71428793860';
   select id into v_conv  from public.clientes where documento = '11444777000161';
