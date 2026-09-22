@@ -1,0 +1,30 @@
+# Exemplo de implantação no Fly.io (plano gratuito cobre este serviço).
+# Ajuste o app name antes de rodar: fly launch --no-deploy && fly deploy
+app = "odonto-nfse"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  AMBIENTE = "HOMOLOGACAO"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Zero máquinas paradas: o serviço acorda sozinho na primeira emissão.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/saude"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
