@@ -128,3 +128,26 @@ variam conforme regime tributário e item da lista de serviços.
 
 Rode primeiro em `AMBIENTE=HOMOLOGACAO`, confira o XML gerado e só então
 troque para produção em Configurações.
+
+---
+
+## Configuração automática
+
+Toda a configuração do Supabase é feita por script, sem passar pelo painel:
+
+```bash
+node scripts/configurar-supabase.mjs \
+  --token sbp_SEU_TOKEN \
+  --admin-email dentista@consultorio.com.br \
+  --admin-nome "Nome da Dentista" \
+  --resend-key re_SUA_CHAVE \
+  --email-from "Consultório <financeiro@seudominio.com.br>"
+```
+
+O script cria o projeto na região de São Paulo, aplica as migrations com
+controle de versão, lê as chaves de API, fecha o cadastro aberto, aponta as
+URLs de redirecionamento, liga o SMTP do Resend, cria o primeiro
+administrador e grava `apps/web/.env.local`. Rodar duas vezes é seguro:
+migrations já aplicadas são puladas e o `AUTH_SECRET` existente é preservado.
+
+Para só testar o token, sem alterar nada: `--verificar`.
