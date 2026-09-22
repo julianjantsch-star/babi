@@ -63,6 +63,10 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
+// Arquivos estáticos e de identidade visual ficam fora do porteiro: mandar um
+// ícone para a tela de login o transforma num redirecionamento 307.
+// O Next lê este matcher em tempo de build e exige um literal — concatenar
+// strings aqui faz a configuração ser ignorada sem nenhum aviso.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/).*)'],
+  matcher: ['/((?!_next/static|_next/image|_next/data|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|icons/|robots.txt|sitemap.xml).*)'],
 };

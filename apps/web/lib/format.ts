@@ -12,6 +12,13 @@ export function data(iso: string | null | undefined) {
   return `${d}/${m}/${y}`;
 }
 
+/**
+ * Maiúscula só na primeira letra. O CSS `capitalize` não serve aqui: ele
+ * maiusculiza toda palavra e produz "Setembro De 2026".
+ */
+export const capitalizar = (texto: string) =>
+  texto.charAt(0).toUpperCase() + texto.slice(1);
+
 export function mesExtenso(iso: string) {
   const [y, m] = iso.slice(0, 10).split('-');
   const nomes = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -29,19 +36,6 @@ export function documento(doc: string | null, tipo: 'PF' | 'PJ') {
   return d;
 }
 
-/** Primeiro e último dia do mês de uma data ISO, em ISO. */
-export function limitesDoMes(iso: string) {
-  const [y, m] = iso.slice(0, 10).split('-').map(Number);
-  const inicio = new Date(Date.UTC(y, m - 1, 1));
-  const fim = new Date(Date.UTC(y, m, 0));
-  return { inicio: isoDe(inicio), fim: isoDe(fim) };
-}
-
 export const isoDe = (d: Date) => d.toISOString().slice(0, 10);
 
 export const hojeISO = () => isoDe(new Date());
-
-export function mesAtual() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}

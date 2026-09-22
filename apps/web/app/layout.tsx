@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   },
   description: 'Contas a receber, notas fiscais e relatórios do consultório.',
   manifest: '/manifest.webmanifest',
+  // Declarado à mão: sem o <link>, o navegador cai no /favicon.ico e leva 404.
+  icons: { icon: '/icon.svg', shortcut: '/icon.svg', apple: '/icon.svg' },
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Financeiro' },
 };
 

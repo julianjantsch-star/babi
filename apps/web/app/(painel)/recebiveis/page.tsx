@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { exigirPerfil } from '@/lib/auth/session';
 import { lerFiltros } from '@/lib/filtros';
-import { moeda, mesExtenso } from '@/lib/format';
+import { moeda, mesExtenso, capitalizar } from '@/lib/format';
 import type { ParcelaView, Totais } from '@/lib/types';
 import { CabecalhoPagina } from '@/components/layout/cabecalho-pagina';
 import { Filtros } from '@/components/filtros/filtros';
@@ -12,6 +12,7 @@ import { CampoBusca } from '@/components/filtros/busca';
 import { Cartao, CartaoTitulo } from '@/components/ui/cards';
 import { Botao } from '@/components/ui/button';
 import { ListaParcelas } from '@/components/parcelas/lista';
+import { SeletorVisao } from '@/components/parcelas/seletor-visao';
 
 export const metadata: Metadata = { title: 'Contas a receber' };
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,7 @@ export default async function PaginaRecebiveis({
   searchParams,
 }: { searchParams: Record<string, string | string[] | undefined> }) {
   const perfil = await exigirPerfil();
-  const filtros = lerFiltros(searchParams);
+  const filtros = lerFiltros(searchParams, { permitirTodos: true });
   const supabase = createClient();
 
   const origemEfetiva = perfil.role === 'BALCAO' ? 'CLINICA' : filtros.origem;
@@ -31,10 +32,15 @@ export default async function PaginaRecebiveis({
     .from('vw_parcelas')
     .select('*', { count: 'exact' })
     .eq('cancelado', false)
-    .gte('vencimento', filtros.inicio)
-    .lte('vencimento', filtros.fim)
     .order('vencimento', { ascending: true })
     .range((filtros.pagina - 1) * POR_PAGINA, filtros.pagina * POR_PAGINA - 1);
+
+  // Com o período aberto, não há recorte de data: a consulta varre tudo.
+  if (!filtros.todosOsMeses) {
+    query = query
+      .gte('vencimento', filtros.inicio)
+      .lte('vencimento', filtros.fim);
+  }
 
   if (origemEfetiva) query = query.eq('origem', origemEfetiva);
   if (filtros.tipoPessoa) query = query.eq('cliente_tipo_pessoa', filtros.tipoPessoa);
@@ -57,12 +63,14 @@ export default async function PaginaRecebiveis({
   const parcelas = (data ?? []) as ParcelaView[];
   const t = totais.data ?? { total: 0, recebido: 0, pendente: 0, vencido: 0, qtd: 0 };
   const totalPaginas = Math.max(1, Math.ceil((count ?? 0) / POR_PAGINA));
+  const periodo = filtros.todosOsMeses
+    ? 'Todos os meses' : capitalizar(mesExtenso(filtros.inicio));
 
   return (
     <>
       <CabecalhoPagina
         titulo="Contas a receber"
-        descricao={mesExtenso(filtros.inicio)}
+        descricao={periodo}
         acao={
           <Link href="/recebiveis/novo">
             <Botao><Plus className="h-4 w-4" /> Lançar conta</Botao>
@@ -71,13 +79,18 @@ export default async function PaginaRecebiveis({
       />
 
       <div className="space-y-4">
-        <Filtros mostrarStatus travadoEmClinica={perfil.role === 'BALCAO'} />
+        <Filtros
+          mostrarStatus
+          permitirTodosOsMeses
+          travadoEmClinica={perfil.role === 'BALCAO'}
+        />
         <CampoBusca />
 
         {/* Totais do recorte atual, sempre visíveis acima da lista. */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            ['Total do mês', Number(t.total), 'text-slate-900'],
+            [filtros.todosOsMeses ? 'Total geral' : 'Total do mês',
+              Number(t.total), 'text-slate-900'],
             ['Recebido', Number(t.recebido), 'text-emerald-600'],
             ['Pendente', Number(t.pendente), 'text-amber-600'],
             ['Vencido', Number(t.vencido), 'text-rose-600'],
@@ -96,7 +109,8 @@ export default async function PaginaRecebiveis({
         <Cartao>
           <CartaoTitulo
             titulo={`${count ?? 0} parcela(s)`}
-            descricao="Clique no cliente para ver o contrato completo"
+            descricao={periodo}
+            acao={<SeletorVisao visao={filtros.visao} />}
           />
           {error ? (
             <p className="px-5 py-8 text-sm text-rose-600">
@@ -106,6 +120,7 @@ export default async function PaginaRecebiveis({
             <ListaParcelas
               parcelas={parcelas}
               podeEstornar={perfil.role !== 'BALCAO'}
+              visao={filtros.visao}
             />
           )}
         </Cartao>
