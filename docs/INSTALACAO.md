@@ -52,6 +52,20 @@ update public.profiles
 O SMTP nativo do Supabase no plano gratuito entrega cerca de 2 e-mails por
 hora — insuficiente para 2FA. Por isso o envio passa pelo Resend.
 
+### Domínio do remetente
+
+> **Estado atual:** o sistema envia de `onboarding@resend.dev`, o domínio
+> genérico do Resend. Ele entrega **somente para o e-mail dono da conta
+> Resend**, o que basta para desenvolvimento, mas **não serve em produção**:
+> a recepcionista e a dentista não receberiam nada.
+
+Para que o sistema envie a qualquer destinatário é obrigatório verificar um
+domínio próprio deste projeto. Contas Resend compartilhadas entre projetos
+exigem cuidado: `lib/email/remetente.ts` mantém uma lista de domínios
+bloqueados, para que este sistema nunca envie em nome de outro negócio da
+mesma conta. Ao adicionar o domínio do consultório, mantenha essa lista
+atualizada.
+
 1. Crie a conta em [resend.com](https://resend.com).
 2. **Domains → Add Domain**: cadastre o domínio do consultório e publique os
    registros SPF/DKIM no DNS. Sem domínio próprio dá para começar com
