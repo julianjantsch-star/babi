@@ -48,6 +48,21 @@ pasta, biblioteca, layout). Pergunto apenas quando a escolha muda o custo, o
 comportamento fiscal/legal, ou é irreversível — e aí ofereço uma recomendação
 clara em vez de uma lista de opções.
 
+## Conta Resend compartilhada
+
+A conta Resend do usuário atende vários projetos dele. Regras deste projeto:
+
+- **`villabilac.com.br` é proibido como remetente**, inclusive subdomínios.
+  Aquele domínio pertence a outro negócio, e este sistema não envia em nome
+  dele. A trava está em `apps/web/lib/email/remetente.ts`, com testes.
+- Chaves de API deste projeto usam **`sending_access`**, nunca acesso total,
+  e levam o prefixo `babi-`. Não encostar nas chaves dos outros projetos
+  (`webloc-*`, `villabilac-*`, `lfmontagens`, `RESEND_API_KEY full`,
+  `Onboarding`) nem nos domínios deles.
+- Ao ler um token recém-criado da API do Resend, conferir o comprimento: a
+  resposta cola o token na palavra seguinte, e um caractere a mais invalida
+  a chave silenciosamente. O formato é `re_` + 8 + `_` + 24 caracteres.
+
 ## Segurança que não se negocia
 
 - Certificado digital (`.pfx`), chaves `service_role` e tokens **nunca** entram
