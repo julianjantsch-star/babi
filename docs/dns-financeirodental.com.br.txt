@@ -1,0 +1,16 @@
+; Zona de financeirodental.com.br
+; A     (raiz)                 Aponta o domínio para o site
+; A     www                    www vai para o mesmo lugar
+; TXT   resend._domainkey      DKIM — assina cada mensagem e prova que saiu deste domínio
+; MX    send                   SPF — caminho de retorno dos e-mails recusados
+; TXT   send                   SPF — autoriza a Amazon SES a enviar por este domínio
+; CNAME rsend                  Caminho de retorno personalizado do Resend
+; TXT   _dmarc                 DMARC — política de alinhamento. Gmail e Outlook cobram isso de quem envia em volume; p=none só monitora, sem rejeitar nada.
+
+@                      3600 IN A 76.76.21.21
+www                    3600 IN A 76.76.21.21
+resend._domainkey      3600 IN TXT "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDAQANsf7eG+KcJXtjUspWY5etDCxyqrcJEBd4VXLoAMKvoJwu2ax/MjF5y42XPsEL97oSs1yhvG1+nQZPWdptjVlW5jeL2dyb8xgopjGcyAmnwETSA6Gm4Ax4ydczHcvhPXT0gdtD4soPodYGBnmY1KydVsipbwJTxNltuN1KC+QIDAQAB"
+send                   3600 IN MX 10 feedback-smtp.sa-east-1.amazonses.com.
+send                   3600 IN TXT "v=spf1 include:amazonses.com ~all"
+rsend                  3600 IN CNAME send.forge.rmta.net.
+_dmarc                 3600 IN TXT "v=DMARC1; p=none; sp=none; adkim=r; aspf=r"

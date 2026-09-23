@@ -92,8 +92,14 @@ async function api(caminho, opts = {}) {
 // ---------------------------------------------------------------------
 
 /**
- * Consulta os servidores raiz públicos em vez do resolvedor local, que pode
- * ter cacheado a ausência do domínio de antes do registro.
+ * Situação do domínio no DNS público.
+ *
+ * Um domínio .br recém-registrado **não resolve** enquanto não tiver
+ * nameservers configurados: o Registro.br só o publica na zona .br depois de
+ * checar que os servidores informados respondem por ele. Isso produz um nó,
+ * porque a Vercel também precisa do domínio para criar a zona. A saída é
+ * criar a zona na Vercel primeiro e só então apontar os nameservers — então
+ * NXDOMAIN aqui é um estado esperado, não um erro.
  */
 async function conferirRegistro() {
   passo('Conferindo o domínio no DNS público');
@@ -104,21 +110,22 @@ async function conferirRegistro() {
   try {
     ns = await resolverDns(cfg.dominio, 'NS');
   } catch (e) {
-    if (e.code === 'ENOTFOUND' || e.code === 'NXDOMAIN') {
-      falhar(`${cfg.dominio} ainda não existe no DNS.\n`
-        + '  Registre o domínio primeiro e aguarde alguns minutos.');
+    if (e.code === 'ENOTFOUND' || e.code === 'NOTFOUND' || e.code === 'NXDOMAIN') {
+      alerta('O domínio ainda não resolve no DNS.');
+      info('Esperado se os nameservers ainda não foram apontados no registrador.');
+      info('Vou preparar a zona na Vercel; o passo seguinte é apontar os NS.');
+      return false;
     }
     falhar(`Falha ao consultar o DNS: ${e.message}`);
   }
 
   const lista = ns.map((n) => n.toLowerCase());
-  ok(`Domínio registrado · nameservers: ${lista.join(', ')}`);
+  ok(`Domínio resolvendo · nameservers: ${lista.join(', ')}`);
 
   const naVercel = lista.some((n) => n.includes('vercel-dns.com'));
   if (!naVercel) {
     alerta('Os nameservers ainda não são os da Vercel.');
     info(`Configure no registrador: ${NS_VERCEL.join(' e ')}`);
-    info('A propagação leva de minutos a algumas horas.');
   }
   return naVercel;
 }
@@ -126,78 +133,137 @@ async function conferirRegistro() {
 async function garantirDominioNaConta() {
   passo('Garantindo o domínio na conta Vercel');
 
+  let servico = null;
   try {
-    const { domain } = await api(`/v5/domains/${cfg.dominio}`);
-    ok(`Já estava na conta (serviço: ${domain.serviceType})`);
+    ({ domain: { serviceType: servico } } = await api(`/v5/domains/${cfg.dominio}`));
   } catch (e) {
     if (e.status !== 404) throw e;
-    await api('/v5/domains', {
-      method: 'POST',
-      body: JSON.stringify({ name: cfg.dominio }),
-    });
-    ok('Domínio adicionado à conta');
   }
 
-  // A zona só existe depois que a Vercel reconhece o domínio; sem ela não há
-  // onde publicar os registros de e-mail.
-  for (let i = 1; i <= 6; i++) {
-    try {
-      await api(`/v4/domains/${cfg.dominio}/records?limit=1`);
-      ok('Zona de DNS disponível');
-      return;
-    } catch (e) {
-      if (e.codigo !== 'invalid_zone' && e.status !== 400) throw e;
-      if (i === 6) {
-        falhar(`A Vercel ainda não criou a zona de DNS de ${cfg.dominio}.\n`
-          + '  Isso costuma significar que o domínio foi registrado agora e o\n'
-          + '  registro ainda não propagou. Tente de novo em alguns minutos.');
-      }
-      info(`Zona ainda não pronta (tentativa ${i}/6), aguardando…`);
-      await espera(15_000);
-    }
+  // "na" é o estado de um domínio adicionado antes de existir no registro: a
+  // Vercel avalia o domínio no momento em que ele entra na conta e não revisa
+  // depois, então a entrada fica presa. Recriar é o que destrava.
+  if (servico === 'na') {
+    alerta('Entrada presa em "na" (criada antes do registro); recriando.');
+    await api(`/v6/domains/${cfg.dominio}`, { method: 'DELETE' });
+    servico = null;
+  }
+
+  if (servico === null) {
+    ({ domain: { serviceType: servico } } = await api('/v5/domains', {
+      method: 'POST',
+      body: JSON.stringify({ name: cfg.dominio }),
+    }));
+    ok(`Domínio adicionado à conta (serviço: ${servico})`);
+  } else {
+    ok(`Já estava na conta (serviço: ${servico})`);
   }
 }
 
-async function publicarRegistrosDeEmail() {
-  passo('Publicando os registros de e-mail na zona');
-
+async function lerPlanoDns() {
   const arquivo = join(RAIZ, 'scripts', 'dns', `${cfg.dominio}.json`);
-  let plano;
   try {
-    plano = JSON.parse(await readFile(arquivo, 'utf8'));
+    return JSON.parse(await readFile(arquivo, 'utf8'));
   } catch {
     falhar(`Não encontrei o plano de DNS em scripts/dns/${cfg.dominio}.json.\n`
       + '  Ele é gerado ao criar o domínio no Resend.');
   }
+}
 
-  const { records: existentes } = await api(
-    `/v4/domains/${cfg.dominio}/records?limit=100`);
+/** Registros do site, na forma que a própria Vercel recomenda para o domínio. */
+async function registrosDoSite() {
+  const conf = await api(`/v6/domains/${cfg.dominio}/config`);
+  const ip = conf.recommendedIPv4?.[0]?.value?.[0] ?? '76.76.21.21';
+  return [
+    { descricao: 'Aponta o domínio para o site', name: '@', type: 'A', value: ip },
+    { descricao: 'www vai para o mesmo lugar', name: 'www', type: 'A', value: ip },
+  ];
+}
 
-  for (const reg of plano.registros) {
-    // Idempotente: mesmo nome, tipo e valor não é recriado.
+/** Zona em formato BIND, para colar no editor avançado do registrador. */
+function montarZona(registros) {
+  const linha = (r) => {
+    const nome = (r.name === '@' ? '@' : r.name).padEnd(22);
+    if (r.type === 'MX') {
+      return `${nome} 3600 IN MX ${r.mxPriority} ${r.value}.`;
+    }
+    if (r.type === 'CNAME') {
+      return `${nome} 3600 IN CNAME ${r.value}.`;
+    }
+    if (r.type === 'TXT') {
+      return `${nome} 3600 IN TXT "${r.value}"`;
+    }
+    return `${nome} 3600 IN ${r.type} ${r.value}`;
+  };
+  return registros.map(linha).join('\n');
+}
+
+async function publicarRegistros() {
+  passo('Publicando os registros de DNS');
+
+  const plano = await lerPlanoDns();
+  const registros = [...(await registrosDoSite()), ...plano.registros];
+
+  // A Vercel só hospeda zona de domínio registrado nela; para domínio de
+  // fora ela apenas recomenda os registros. Detectar isso pela escrita, e
+  // não pela leitura: a leitura devolve 200 com lista vazia de qualquer jeito.
+  const temZona = await (async () => {
+    let sonda;
+    try {
+      sonda = await api(`/v2/domains/${cfg.dominio}/records`, {
+        method: 'POST',
+        body: JSON.stringify({ name: '_sonda', type: 'TXT', value: 'x', ttl: 60 }),
+      });
+    } catch (e) {
+      if (e.codigo === 'invalid_zone') return false;
+      throw e;
+    }
+    // A sonda só existia para descobrir se dá para escrever; não fica na zona.
+    if (sonda?.uid) {
+      await api(`/v2/domains/${cfg.dominio}/records/${sonda.uid}`, { method: 'DELETE' })
+        .catch(() => alerta('Não consegui remover o registro de sondagem _sonda.'));
+    }
+    return true;
+  })();
+
+  if (!temZona) {
+    const caminho = join(RAIZ, 'docs', `dns-${cfg.dominio}.txt`);
+    const zona = montarZona(registros);
+    const cabecalho = registros
+      .map((r) => `; ${r.type.padEnd(5)} ${(r.name === '@' ? '(raiz)' : r.name).padEnd(22)} ${r.descricao}`)
+      .join('\n');
+
+    await writeFile(caminho, `; Zona de ${cfg.dominio}\n${cabecalho}\n\n${zona}\n`);
+
+    alerta('A Vercel não hospeda o DNS deste domínio (registrado fora dela).');
+    info(`Zona pronta para colar salva em docs/dns-${cfg.dominio}.txt`);
+    console.log(`\n${zona}\n`);
+    return false;
+  }
+
+  const { records: existentes } = await api(`/v4/domains/${cfg.dominio}/records?limit=100`);
+  for (const reg of registros) {
     const igual = (existentes ?? []).find(
       (e) => e.type === reg.type
-        && (e.name ?? '') === reg.name
+        && (e.name ?? '') === (reg.name === '@' ? '' : reg.name)
         && (e.value ?? '').trim() === reg.value.trim(),
     );
-    if (igual) {
-      info(`${reg.type} ${reg.name} — já publicado`);
-      continue;
-    }
+    if (igual) { info(`${reg.type} ${reg.name} — já publicado`); continue; }
 
-    const corpo = { name: reg.name, type: reg.type, value: reg.value, ttl: 3600 };
+    const corpo = {
+      name: reg.name === '@' ? '' : reg.name,
+      type: reg.type,
+      value: reg.value,
+      ttl: 3600,
+    };
     if (reg.mxPriority != null) corpo.mxPriority = reg.mxPriority;
 
-    try {
-      await api(`/v2/domains/${cfg.dominio}/records`, {
-        method: 'POST',
-        body: JSON.stringify(corpo),
-      });
-      ok(`${reg.type} ${reg.name} — ${reg.descricao}`);
-    } catch (e) {
-      falhar(`Falha ao publicar ${reg.type} ${reg.name}: ${e.message}`);
-    }
+    await api(`/v2/domains/${cfg.dominio}/records`, {
+      method: 'POST', body: JSON.stringify(corpo),
+    });
+    ok(`${reg.type} ${reg.name} — ${reg.descricao}`);
   }
+  return true;
 }
 
 async function ligarAoProjeto() {
@@ -211,7 +277,8 @@ async function ligarAoProjeto() {
       });
       ok(`${nome} ligado ao projeto`);
     } catch (e) {
-      if (/already in use by this project|already exists/i.test(e.message ?? '')) {
+      if (e.codigo === 'domain_already_in_use'
+        || /already in use|already exists/i.test(e.message ?? '')) {
         info(`${nome} — já estava ligado`);
         return;
       }
@@ -382,13 +449,17 @@ async function principal() {
 
   console.log(cor('1', `\n  Configuração de domínio — ${cfg.dominio}`));
 
-  const nsProntos = await conferirRegistro();
+  await conferirRegistro();
   await garantirDominioNaConta();
-  await publicarRegistrosDeEmail();
+  const dnsPublicado = await publicarRegistros();
   await ligarAoProjeto();
 
-  if (cfg.somenteDns) {
-    console.log(`\n${cor('1;32', '━━ DNS publicado ━━')}\n`);
+  if (cfg.somenteDns || !dnsPublicado) {
+    console.log(`\n${cor('1;32', '━━ Domínio preparado ━━')}\n`);
+    if (!dnsPublicado) {
+      console.log('  Falta publicar a zona acima no painel do registrador.');
+      console.log('  Depois disso, rode este script de novo sem --somente-dns.\n');
+    }
     return;
   }
 
@@ -403,11 +474,7 @@ async function principal() {
   console.log(`\n${cor('1;32', '━━ Domínio configurado ━━')}\n`);
   console.log(`  Site:      ${siteUrl}${respondeu ? '' : '  (ainda propagando)'}`);
   console.log(`  Remetente: ${emailFrom}`);
-  if (!nsProntos) {
-    console.log(`\n  ${cor('33', 'Falta apontar os nameservers no registrador:')}`);
-    console.log(`  ${NS_VERCEL.join('\n  ')}`);
-  }
-  console.log('\n  Depois disso, peça a verificação do domínio no Resend.\n');
+  console.log('\n  Falta pedir a verificação do domínio no Resend.\n');
 }
 
 principal().catch((e) => falhar(e.stack ?? e.message));
