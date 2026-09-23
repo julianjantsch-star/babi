@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
   LayoutDashboard, Receipt, Users, FileText, BarChart3,
-  Settings, UserCog, Menu, X, LogOut,
+  Settings, UserCog, Menu, X, LogOut, FileSignature,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AppRole, Profile } from '@/lib/types';
@@ -26,8 +26,10 @@ const ITENS: Item[] = [
     papeis: ['ADMIN', 'FINANCEIRO', 'BALCAO'], mobile: true },
   { href: '/clientes', rotulo: 'Clientes', icone: Users,
     papeis: ['ADMIN', 'FINANCEIRO', 'BALCAO'], mobile: true },
-  { href: '/notas', rotulo: 'Notas fiscais', icone: FileText,
+  { href: '/contratos', rotulo: 'Contratos', icone: FileSignature,
     papeis: ['ADMIN', 'FINANCEIRO'], mobile: true },
+  { href: '/notas', rotulo: 'Notas fiscais', icone: FileText,
+    papeis: ['ADMIN', 'FINANCEIRO'] },
   { href: '/relatorios', rotulo: 'Relatórios', icone: BarChart3,
     papeis: ['ADMIN', 'FINANCEIRO'] },
   { href: '/usuarios', rotulo: 'Usuários', icone: UserCog, papeis: ['ADMIN'] },

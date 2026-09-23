@@ -141,3 +141,72 @@ export interface NotaFiscal {
   erro: string | null;
   created_at: string;
 }
+
+// --------------------------- contratos -------------------------------
+
+export type ModeloContrato = 'ORTODONTICO' | 'ALINHADOR';
+
+export const MODELOS_CONTRATO: {
+  value: ModeloContrato; label: string; descricao: string;
+}[] = [
+  { value: 'ORTODONTICO', label: 'Ortodôntico',
+    descricao: 'Aparelho fixo, móvel ou ortopédico funcional' },
+  { value: 'ALINHADOR', label: 'Alinhador (Invisalign)',
+    descricao: 'Tratamento com alinhadores e plano CLINCHECK' },
+];
+
+export interface Emitente {
+  id: string;
+  tipo_pessoa: TipoPessoa;
+  nome: string;
+  documento: string;
+  qualificacao: string | null;
+  rg: string | null;
+  cro: string | null;
+  representante: string | null;
+  representante_doc: string | null;
+  email: string | null;
+  telefone: string | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  municipio: string | null;
+  uf: string | null;
+  ativo: boolean;
+  padrao: boolean;
+}
+
+export interface ModeloContratoRegistro {
+  id: string;
+  chave: ModeloContrato;
+  titulo: string;
+  corpo: string;
+  completo: boolean;
+  ativo: boolean;
+  versao: number;
+  updated_at: string;
+}
+
+export interface ContratoView {
+  id: string;
+  numero: number;
+  modelo_chave: ModeloContrato;
+  modelo_titulo: string;
+  data_contrato: string;
+  valor_total: number;
+  num_parcelas: number;
+  a_vista: boolean;
+  rascunho: boolean;
+  cancelado: boolean;
+  recebivel_id: string | null;
+  created_at: string;
+  cliente_id: string;
+  cliente_nome: string;
+  cliente_documento: string | null;
+  cliente_tipo_pessoa: TipoPessoa;
+  emitente_id: string;
+  emitente_nome: string;
+  emitente_tipo_pessoa: TipoPessoa;
+}

@@ -5,6 +5,10 @@ import { nfseDisponivel } from '@/lib/nfse/cliente';
 import { CabecalhoPagina } from '@/components/layout/cabecalho-pagina';
 import { Cartao, CartaoTitulo, Aviso } from '@/components/ui/cards';
 import { FormConfig, BotaoEsquecerDispositivos } from '@/components/config/form-config';
+import { FormEmitente } from '@/components/contratos/form-emitente';
+import { Etiqueta } from '@/components/ui/badge';
+import { documento as fdoc } from '@/lib/format';
+import type { Emitente } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Configurações' };
 export const dynamic = 'force-dynamic';
@@ -13,8 +17,11 @@ export default async function PaginaConfiguracoes() {
   await exigirPerfil(['ADMIN']);
   const supabase = createClient();
 
-  const { data: config } = await supabase
-    .from('configuracoes').select('*').eq('id', true).maybeSingle();
+  const [{ data: config }, { data: emitentesData }] = await Promise.all([
+    supabase.from('configuracoes').select('*').eq('id', true).maybeSingle(),
+    supabase.from('emitentes').select('*').order('tipo_pessoa'),
+  ]);
+  const emitentes = (emitentesData ?? []) as Emitente[];
 
   return (
     <>
@@ -32,6 +39,44 @@ export default async function PaginaConfiguracoes() {
         )}
 
         <FormConfig config={config ?? {}} />
+
+        <Cartao>
+          <CartaoTitulo
+            titulo="Emitentes de contrato"
+            descricao="Seus dados no lado da contratada — define também a origem do recebível"
+            acao={<FormEmitente />}
+          />
+          {emitentes.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500 sm:px-5">
+              Nenhum emitente cadastrado. Sem ele não é possível emitir contrato.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {emitentes.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-3
+                  px-4 py-3.5 sm:px-5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {e.nome}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {fdoc(e.documento, e.tipo_pessoa)}
+                      {e.cro && ` · CRO ${e.cro}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Etiqueta tom={e.tipo_pessoa === 'PJ' ? 'azul' : 'neutro'}>
+                      {e.tipo_pessoa}
+                    </Etiqueta>
+                    {e.padrao && <Etiqueta tom="verde">Padrão</Etiqueta>}
+                    {!e.ativo && <Etiqueta tom="vermelho">Inativo</Etiqueta>}
+                    <FormEmitente emitente={e} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Cartao>
 
         <Cartao>
           <CartaoTitulo

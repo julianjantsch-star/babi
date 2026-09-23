@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test \"lib/**/*.test.mjs\""
+    "test": "node --import tsx --test \"lib/**/*.test.mjs\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -17,6 +17,7 @@
     "date-fns": "^3.6.0",
     "lucide-react": "^0.453.0",
     "next": "^14.2.15",
+    "pdf-lib": "^1.17.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "resend": "^4.0.0",
@@ -33,6 +34,7 @@
     "eslint-config-next": "^14.2.15",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.3"
   }
 }
