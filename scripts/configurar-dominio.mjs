@@ -58,6 +58,8 @@ const cfg = {
   somenteDns: !!opcoes['somente-dns'],
 };
 
+cfg.cloudflareToken = opcoes['cloudflare-token'] ?? process.env.CLOUDFLARE_API_TOKEN;
+
 const cor = (c, t) => `\x1b[${c}m${t}\x1b[0m`;
 const passo = (t) => console.log(`\n${cor('1;34', '▸')} ${cor('1', t)}`);
 const ok = (t) => console.log(`  ${cor('32', '✓')} ${t}`);
@@ -198,11 +200,111 @@ function montarZona(registros) {
   return registros.map(linha).join('\n');
 }
 
-async function publicarRegistros() {
-  passo('Publicando os registros de DNS');
+// ---------------------------------------------------------------------
+// Cloudflare: o caminho automatizável, porque o Registro.br não tem API de
+// DNS para o titular do domínio — só RDAP (leitura) e EPP (provedores).
+// ---------------------------------------------------------------------
 
+async function cloudflare(caminho, opts = {}) {
+  const r = await fetch(`https://api.cloudflare.com/client/v4${caminho}`, {
+    ...opts,
+    headers: {
+      authorization: `Bearer ${cfg.cloudflareToken}`,
+      'content-type': 'application/json',
+      ...opts.headers,
+    },
+  });
+  const corpo = await r.json().catch(() => ({}));
+  if (!r.ok || corpo.success === false) {
+    const msg = (corpo.errors ?? [])
+      .map((e) => `${e.code}: ${e.message}`).join(' | ') || `HTTP ${r.status}`;
+    const erro = new Error(msg);
+    erro.status = r.status;
+    throw erro;
+  }
+  return corpo.result;
+}
+
+/** Nome completo do registro; a Cloudflare trabalha com FQDN. */
+const fqdn = (nome) => (nome === '@' ? cfg.dominio : `${nome}.${cfg.dominio}`);
+
+async function publicarNaCloudflare(registros) {
+  passo('Publicando os registros na Cloudflare');
+
+  let zonas;
+  try {
+    zonas = await cloudflare(`/zones?name=${cfg.dominio}`);
+  } catch (e) {
+    // 6003 é cabeçalho malformado (token com lixo), 9109/10000 é token sem
+    // permissão. Os três significam a mesma coisa para quem está usando.
+    if (/6003|9109|10000|authentication/i.test(e.message) || e.status === 403) {
+      falhar('Token da Cloudflare inválido ou sem permissão de DNS.\n'
+        + '  Gere um em https://dash.cloudflare.com/profile/api-tokens\n'
+        + '  com a permissão Zone → DNS → Edit para este domínio.');
+    }
+    throw e;
+  }
+  if (!zonas?.length) {
+    falhar(`O domínio ${cfg.dominio} não está na conta Cloudflare do token.\n`
+      + '  Adicione o site na Cloudflare antes de rodar este script.');
+  }
+  const zona = zonas[0];
+  ok(`Zona encontrada · status: ${zona.status}`);
+
+  if (zona.status !== 'active') {
+    alerta('A zona ainda não está ativa — faltam os nameservers no registrador:');
+    for (const ns of zona.name_servers ?? []) info(ns);
+  }
+
+  const existentes = await cloudflare(`/zones/${zona.id}/dns_records?per_page=100`);
+
+  for (const reg of registros) {
+    const nome = fqdn(reg.name);
+    const igual = existentes.find(
+      (e) => e.type === reg.type && e.name === nome && e.content === reg.value,
+    );
+    if (igual) { info(`${reg.type} ${reg.name} — já publicado`); continue; }
+
+    // Mesmo nome e tipo com conteúdo diferente é atualização, não duplicata.
+    // Exceção: TXT e MX aceitam vários valores no mesmo nome.
+    const conflitante = ['TXT', 'MX'].includes(reg.type)
+      ? null
+      : existentes.find((e) => e.type === reg.type && e.name === nome);
+
+    const corpo = {
+      type: reg.type,
+      name: nome,
+      content: reg.value,
+      ttl: 3600,
+      ...(reg.mxPriority != null ? { priority: reg.mxPriority } : {}),
+      // Registros de e-mail nunca passam pelo proxy da Cloudflare; o do site
+      // fica sem proxy também, senão a Vercel não emite o certificado.
+      ...(['A', 'CNAME'].includes(reg.type) ? { proxied: false } : {}),
+    };
+
+    if (conflitante) {
+      await cloudflare(`/zones/${zona.id}/dns_records/${conflitante.id}`, {
+        method: 'PUT', body: JSON.stringify(corpo),
+      });
+      ok(`${reg.type} ${reg.name} — atualizado`);
+    } else {
+      await cloudflare(`/zones/${zona.id}/dns_records`, {
+        method: 'POST', body: JSON.stringify(corpo),
+      });
+      ok(`${reg.type} ${reg.name} — ${reg.descricao}`);
+    }
+  }
+
+  return zona.status === 'active';
+}
+
+async function publicarRegistros() {
   const plano = await lerPlanoDns();
   const registros = [...(await registrosDoSite()), ...plano.registros];
+
+  if (cfg.cloudflareToken) return publicarNaCloudflare(registros);
+
+  passo('Publicando os registros de DNS');
 
   // A Vercel só hospeda zona de domínio registrado nela; para domínio de
   // fora ela apenas recomenda os registros. Detectar isso pela escrita, e

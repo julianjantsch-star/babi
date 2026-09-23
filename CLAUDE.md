@@ -32,6 +32,35 @@ disso. Ao pedir:
   quando o serviço permitir.
 - Guardo em `.env.local` / secrets do serviço, **nunca** em arquivo versionado.
 
+## Modus operandi: "ele autentica, eu executo"
+
+O usuário pediu que esse fosse o padrão, e ele é — com uma ressalva de
+mecanismo que precisa ficar clara, porque já causou confusão duas vezes.
+
+**Não existe navegador compartilhado.** O Chromium desta sessão roda sem tela,
+dentro de um contêiner isolado na nuvem: sem display gráfico, sem endereço
+acessível de fora. Não há janela para ele ver nem campo para ele digitar.
+"Abra o site que eu logo" é fisicamente impossível. Dizer isso na hora, e
+oferecer o caminho equivalente, em vez de aceitar e falhar depois.
+
+O que substitui, em ordem de preferência:
+
+1. **Conector com OAuth** — ele clica em Conectar, faz login no site oficial,
+   e eu passo a ter acesso autorizado. Nenhum segredo no histórico. Foi assim
+   com o Resend. Conferir sempre se existe conector antes de pedir token.
+2. **Token de API** que ele gera e cola. Foi assim com Supabase e Vercel.
+3. **Serviço sem API** (Registro.br é o caso): aí não há o que automatizar.
+   Entrego o conteúdo pronto para colar, em um bloco só, e sou explícito de
+   que é limitação do serviço — não minha escolha.
+
+**Nunca pedir senha de conta.** Token e OAuth são revogáveis e escopados;
+senha dá acesso total e costuma esbarrar em 2 fatores. Quando um serviço só
+tem senha, a resposta certa é migrar para um que tenha API, não pedir a senha.
+
+Ao escolher entre fornecedores, **peso a automação**: um serviço com API que
+me deixa resolver tudo sozinho vale mais do que um sem API, mesmo que a
+migração custe alguns minutos hoje.
+
 ## Como comunicar
 
 - Português do Brasil, direto, sem jargão desnecessário.
