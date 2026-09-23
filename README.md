@@ -94,6 +94,10 @@ toca o banco, o navegador ou o repositório.
 
 ## Instalação
 
+Pegando o projeto agora? Comece pelo
+**[docs/HANDOVER.md](docs/HANDOVER.md)** — estado atual, o que falta e as
+armadilhas já mapeadas.
+
 O passo a passo completo está em **[docs/INSTALACAO.md](docs/INSTALACAO.md)**.
 Em resumo:
 
