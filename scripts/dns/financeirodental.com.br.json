@@ -1,0 +1,39 @@
+{
+  "dominio": "financeirodental.com.br",
+  "resendDomainId": "147f4e91-580c-463b-b34c-602f7d6c1200",
+  "regiao": "sa-east-1",
+  "observacao": "Registros de envio gerados pelo Resend. A chave DKIM é pública por definição — ela existe para ser publicada no DNS e conferida por quem recebe o e-mail.",
+  "registros": [
+    {
+      "descricao": "DKIM — assina cada mensagem e prova que saiu deste domínio",
+      "name": "resend._domainkey",
+      "type": "TXT",
+      "value": "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDAQANsf7eG+KcJXtjUspWY5etDCxyqrcJEBd4VXLoAMKvoJwu2ax/MjF5y42XPsEL97oSs1yhvG1+nQZPWdptjVlW5jeL2dyb8xgopjGcyAmnwETSA6Gm4Ax4ydczHcvhPXT0gdtD4soPodYGBnmY1KydVsipbwJTxNltuN1KC+QIDAQAB"
+    },
+    {
+      "descricao": "SPF — caminho de retorno dos e-mails recusados",
+      "name": "send",
+      "type": "MX",
+      "value": "feedback-smtp.sa-east-1.amazonses.com",
+      "mxPriority": 10
+    },
+    {
+      "descricao": "SPF — autoriza a Amazon SES a enviar por este domínio",
+      "name": "send",
+      "type": "TXT",
+      "value": "v=spf1 include:amazonses.com ~all"
+    },
+    {
+      "descricao": "Caminho de retorno personalizado do Resend",
+      "name": "rsend",
+      "type": "CNAME",
+      "value": "send.forge.rmta.net"
+    },
+    {
+      "descricao": "DMARC — política de alinhamento. Gmail e Outlook cobram isso de quem envia em volume; p=none só monitora, sem rejeitar nada.",
+      "name": "_dmarc",
+      "type": "TXT",
+      "value": "v=DMARC1; p=none; sp=none; adkim=r; aspf=r"
+    }
+  ]
+}

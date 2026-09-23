@@ -52,19 +52,50 @@ update public.profiles
 O SMTP nativo do Supabase no plano gratuito entrega cerca de 2 e-mails por
 hora — insuficiente para 2FA. Por isso o envio passa pelo Resend.
 
-### Domínio do remetente
+### Domínio próprio
 
-> **Estado atual:** o sistema envia de `onboarding@resend.dev`, o domínio
-> genérico do Resend. Ele entrega **somente para o e-mail dono da conta
-> Resend**, o que basta para desenvolvimento, mas **não serve em produção**:
-> a recepcionista e a dentista não receberiam nada.
+O mesmo domínio serve para as duas pontas: o endereço do sistema e o
+remetente dos e-mails.
 
-Para que o sistema envie a qualquer destinatário é obrigatório verificar um
-domínio próprio deste projeto. Contas Resend compartilhadas entre projetos
-exigem cuidado: `lib/email/remetente.ts` mantém uma lista de domínios
-bloqueados, para que este sistema nunca envie em nome de outro negócio da
-mesma conta. Ao adicionar o domínio do consultório, mantenha essa lista
-atualizada.
+> **Enquanto não houver domínio**, o sistema envia de `onboarding@resend.dev`,
+> que entrega **somente para o e-mail dono da conta Resend**. Serve para
+> desenvolvimento e **não serve em produção**: a recepcionista não receberia o
+> código de acesso.
+
+Registrar um domínio é uma compra anual e envolve cartão — é o único passo
+que não dá para automatizar. Depois dele, `scripts/configurar-dominio.mjs`
+faz o resto:
+
+```bash
+node scripts/configurar-dominio.mjs \
+  --dominio financeirodental.com.br \
+  --token vcp_SEU_TOKEN \
+  --supabase-token sbp_SEU_TOKEN
+```
+
+O script confere o registro no DNS público, garante o domínio na conta
+Vercel, publica DKIM/SPF/DMARC na zona, liga o domínio ao site com `www`
+redirecionando para a raiz, atualiza as variáveis, republica e aponta o
+Supabase para o novo endereço. É idempotente: registro que já existe não é
+recriado.
+
+**Ordem que funciona**, porque a Vercel só cria a zona de DNS depois que o
+domínio existe no registro:
+
+1. Registrar o domínio (Registro.br, ~R$ 40/ano para `.com.br`).
+2. Rodar o script — ele publica os registros na zona da Vercel.
+3. Apontar os nameservers no registrador para `ns1.vercel-dns.com` e
+   `ns2.vercel-dns.com`.
+4. Rodar o script de novo, para conferir o site e o certificado.
+5. Pedir a verificação do domínio no Resend.
+
+Os registros de DNS de cada domínio ficam em `scripts/dns/<domínio>.json`,
+gerados a partir do que o Resend devolve ao cadastrar o domínio. A chave
+DKIM ali é pública por definição: ela existe para ser publicada no DNS.
+
+**Conta Resend compartilhada:** `lib/email/remetente.ts` mantém uma lista de
+domínios bloqueados, para que este sistema nunca envie em nome de outro
+negócio da mesma conta. Ao adicionar um domínio novo, confira essa lista.
 
 1. Crie a conta em [resend.com](https://resend.com).
 2. **Domains → Add Domain**: cadastre o domínio do consultório e publique os
