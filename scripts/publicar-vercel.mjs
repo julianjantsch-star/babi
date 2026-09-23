@@ -224,11 +224,48 @@ async function publicar() {
   }
 }
 
-/** Descobre o domínio estável (…vercel.app) que não muda a cada publicação. */
+/** O domínio responde de verdade, ou só está cadastrado na Vercel? */
+async function responde(dominio) {
+  try {
+    const r = await fetch(`https://dns.google/resolve?name=${dominio}&type=A`, {
+      headers: { accept: 'application/dns-json' },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const { Status, Answer } = await r.json();
+    return Status === 0 && Array.isArray(Answer) && Answer.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Endereço estável do site.
+ *
+ * Um domínio próprio pode estar cadastrado na Vercel muito antes de existir
+ * no DNS. Adotá-lo cedo demais aponta os links de e-mail para um endereço
+ * morto, então ele só é promovido depois de responder de fato. Domínio com
+ * redirecionamento (o www) nunca é o endereço principal: ele manda para cá.
+ */
 async function dominioEstavel(projeto) {
   const { domains } = await api(`/v9/projects/${projeto.id}/domains?limit=50`);
-  const producao = domains?.find((d) => !d.gitBranch && d.verified);
-  return producao ? `https://${producao.name}` : null;
+
+  const candidatos = (domains ?? [])
+    .filter((d) => !d.gitBranch && !d.redirect && d.verified)
+    .map((d) => d.name);
+
+  const padrao = `${projeto.name}.vercel.app`;
+
+  for (const nome of candidatos) {
+    if (nome.endsWith('.vercel.app')) continue;
+    if (await responde(nome)) {
+      ok(`Domínio próprio no ar: ${nome}`);
+      return `https://${nome}`;
+    }
+    alerta(`${nome} ainda não resolve no DNS; seguindo com ${padrao}.`);
+  }
+
+  const vercelApp = candidatos.find((n) => n.endsWith('.vercel.app')) ?? padrao;
+  return `https://${vercelApp}`;
 }
 
 async function alinharSupabase(siteUrl) {
@@ -243,13 +280,18 @@ async function alinharSupabase(siteUrl) {
   const ref = env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/([^.]+)\./)?.[1];
   if (!ref) falhar('Não identifiquei o projeto Supabase pelo .env.local');
 
-  // Mantém localhost na lista para o desenvolvimento continuar funcionando.
-  const redirects = [
-    `${siteUrl}/definir-senha`, `${siteUrl}/auth/callback`, `${siteUrl}/**`,
-    'http://localhost:3000/definir-senha',
-    'http://localhost:3000/auth/callback',
-    'http://localhost:3000/**',
-  ];
+  // O endereço da Vercel fica na lista mesmo quando não é o principal: ele
+  // é a saída quando um domínio próprio ainda não propagou ou sai do ar.
+  // Localhost fica para o desenvolvimento continuar funcionando.
+  const origens = [...new Set([
+    siteUrl,
+    `https://${cfg.nome}.vercel.app`,
+    'http://localhost:3000',
+  ])];
+
+  const redirects = origens.flatMap((o) => [
+    `${o}/definir-senha`, `${o}/auth/callback`, `${o}/**`,
+  ]);
 
   const r = await fetch(`https://api.supabase.com/v1/projects/${ref}/config/auth`, {
     method: 'PATCH',
